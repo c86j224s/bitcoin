@@ -141,12 +141,13 @@ bool AppInit(int argc, char* argv[])
         InitLogging();
         // 의도와 달리 잘못 설정할 수 있는, 사용자의 인자 입력을 고쳐줌.
         InitParameterInteraction();
-        // TODO -------------------------------------- 여기서부터 이어서....
+        // OS, 네트워크 환경 별 기본적인 초기화와 크랙을 막는(DEP 등) 방어코드, 시그널 핸들러 처리 추가 등.
         if (!AppInitBasicSetup())
         {
             // InitError will have been called with detailed error, which ends up on console
             exit(EXIT_FAILURE);
         }
+        // TODO -------------------------------------- 여기서부터 이어서....
         if (!AppInitParameterInteraction())
         {
             // InitError will have been called with detailed error, which ends up on console
@@ -157,12 +158,15 @@ bool AppInit(int argc, char* argv[])
             // InitError will have been called with detailed error, which ends up on console
             exit(EXIT_FAILURE);
         }
+        // TODO -------------------------------------- 여기까지 보고 넘어가야 함...
+        // 데몬으로 실행해달라고 했으면 데몬으로 실행.
         if (gArgs.GetBoolArg("-daemon", false))
         {
 #if HAVE_DECL_DAEMON
             fprintf(stdout, "Bitcoin server starting\n");
 
             // Daemonize
+            // 요건 리눅스 API인듯... 유닉스 표준인지는 잘 모르겠음... 나중에 보자.
             if (daemon(1, 0)) { // don't chdir (1), do close FDs (0)
                 fprintf(stderr, "Error: daemon() failed: %s\n", strerror(errno));
                 return false;
@@ -173,11 +177,13 @@ bool AppInit(int argc, char* argv[])
 #endif // HAVE_DECL_DAEMON
         }
         // Lock data directory after daemonization
+        // 데몬으로 전환한 다음에도 락이 잘 잡히는지 체크함.
         if (!AppInitLockDataDirectory())
         {
             // If locking the data directory failed, exit immediately
             exit(EXIT_FAILURE);
         }
+        // TODO 여기서부터 다시 이어서....................................................................
         fRet = AppInitMain(threadGroup, scheduler);
     }
     catch (const std::exception& e) {

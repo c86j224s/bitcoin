@@ -838,6 +838,7 @@ ServiceFlags nLocalServices = NODE_NETWORK;
 bool AppInitBasicSetup()
 {
     // ********************************************************* Step 1: setup
+    // TODO 윈도우 힙덤프를 끈다. 대체 왜 ??? 덤프 남으면 좋은 거 아닌가요? 키 유출될까봐?
 #ifdef _MSC_VER
     // Turn off Microsoft heap dump noise
     _CrtSetReportMode(_CRT_WARN, _CRTDBG_MODE_FILE);
@@ -845,6 +846,7 @@ bool AppInitBasicSetup()
     // Disable confusing "helpful" text message on abort, Ctrl-C
     _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
 #endif
+    // 윈도우의 DEP를 활성화 한다.
 #ifdef WIN32
     // Enable Data Execution Prevention (DEP)
     // Minimum supported OS versions: WinXP SP3, WinVista >= SP1, Win Server 2008
@@ -858,26 +860,31 @@ bool AppInitBasicSetup()
     PSETPROCDEPPOL setProcDEPPol = (PSETPROCDEPPOL)GetProcAddress(GetModuleHandleA("Kernel32.dll"), "SetProcessDEPPolicy");
     if (setProcDEPPol != nullptr) setProcDEPPol(PROCESS_DEP_ENABLE);
 #endif
-
+    // 역시 윈도우의 WSAStartup을 해서 윈속2를 쓸 수 있도록 한다.
     if (!SetupNetworking())
         return InitError("Initializing networking failed");
 
 #ifndef WIN32
+    // 새 파일을 생성할 때, 파일의 제한한다. 기본적으로, group과 other의 접근 권한을 막는다. 
     if (!gArgs.GetBoolArg("-sysperms", false)) {
         umask(077);
     }
 
     // Clean shutdown on SIGTERM
+    // sigterm, sigint 시그널을 받으면 정상 종료한다.
     registerSignalHandler(SIGTERM, HandleSIGTERM);
     registerSignalHandler(SIGINT, HandleSIGTERM);
 
     // Reopen debug.log on SIGHUP
+    // TODO 왜지..
     registerSignalHandler(SIGHUP, HandleSIGHUP);
 
     // Ignore SIGPIPE, otherwise it will bring the daemon down if the client closes unexpectedly
+    // TODO 요건 왜 해놨는지 모르겠네..
     signal(SIGPIPE, SIG_IGN);
 #endif
 
+    // TODO 왜지..
     std::set_new_handler(new_handler_terminate);
 
     return true;
@@ -1188,6 +1195,7 @@ bool AppInitSanityChecks()
     // Probe the data directory lock to give an early error message, if possible
     // We cannot hold the data directory lock here, as the forking for daemon() hasn't yet happened,
     // and a fork will cause weird behavior to it.
+    // 데몬화 되기 전에도 datadir 락이 잡히는지 미리 한번 체크함.
     return LockDataDirectory(true);
 }
 
