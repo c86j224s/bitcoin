@@ -342,6 +342,7 @@ const CChainParams &Params() {
 
 std::unique_ptr<CChainParams> CreateChainParams(const std::string& chain)
 {
+    // TODO: 꼭 이 함수는 다시 한번 돌아와서 확인해봐야 함. 중요한 키워드 / 사건들이 많이 들어 있음. chainparams.h, chainparams.cpp 중요.
     if (chain == CBaseChainParams::MAIN)
         return std::unique_ptr<CChainParams>(new CMainParams());
     else if (chain == CBaseChainParams::TESTNET)
@@ -353,7 +354,12 @@ std::unique_ptr<CChainParams> CreateChainParams(const std::string& chain)
 
 void SelectParams(const std::string& network)
 {
+    // 체인에 따라 달라지는 인자들을 선택한다. 
+
+    // 여기서는 기본 인자들, 포트나 네트워크 이름 등을 설정한다. global "base" chain params
     SelectBaseParams(network);
+
+    // 여기서는 해당 네트워크의 identity를 구성하는 genesis block, 중요한 checkpoint blockhash, 시간 등을 준비한다. global chain params
     globalChainParams = CreateChainParams(network);
 }
 
