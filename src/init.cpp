@@ -898,6 +898,7 @@ bool AppInitParameterInteraction()
     // also see: InitParameterInteraction()
 
     // if using block pruning, then disallow txindex
+    // prune(최근 블록만 받게 하는 옵션)과 txindex(모든 tx를 인덱싱 하는 옵션)는 배치되는 옵션임.
     if (gArgs.GetArg("-prune", 0)) {
         if (gArgs.GetBoolArg("-txindex", DEFAULT_TXINDEX))
             return InitError(_("Prune mode is incompatible with -txindex."));
@@ -910,17 +911,20 @@ bool AppInitParameterInteraction()
     }
 
     // Make sure enough file descriptors are available
+    // 최대 피어 커넥션 수.. 기본은 125개임.
     int nBind = std::max(nUserBind, size_t(1));
     nUserMaxConnections = gArgs.GetArg("-maxconnections", DEFAULT_MAX_PEER_CONNECTIONS);
     nMaxConnections = std::max(nUserMaxConnections, 0);
 
     // Trim requested connection counts, to fit into system limitations
+    // 남는 파일디스크립터 수는 다 맥스로 잡아버림.
     nMaxConnections = std::max(std::min(nMaxConnections, (int)(FD_SETSIZE - nBind - MIN_CORE_FILEDESCRIPTORS - MAX_ADDNODE_CONNECTIONS)), 0);
     nFD = RaiseFileDescriptorLimit(nMaxConnections + MIN_CORE_FILEDESCRIPTORS + MAX_ADDNODE_CONNECTIONS);
     if (nFD < MIN_CORE_FILEDESCRIPTORS)
         return InitError(_("Not enough file descriptors available."));
     nMaxConnections = std::min(nFD - MIN_CORE_FILEDESCRIPTORS - MAX_ADDNODE_CONNECTIONS, nMaxConnections);
 
+    // 유저가 원했던 커넥션 수보다 가능한 수가 적으면 워닝.
     if (nMaxConnections < nUserMaxConnections)
         InitWarning(strprintf(_("Reducing -maxconnections from %d to %d, because of system limitations."), nUserMaxConnections, nMaxConnections));
 
@@ -951,6 +955,7 @@ bool AppInitParameterInteraction()
         logCategories &= ~flag;
     }
 
+    // 지원했었으나 지원이 취소되었거나 하는 인자들...
     // Check for -debugnet
     if (gArgs.GetBoolArg("-debugnet", false))
         InitWarning(_("Unsupported argument -debugnet ignored, use -debug=net."));
@@ -969,6 +974,8 @@ bool AppInitParameterInteraction()
 
     if (gArgs.IsArgSet("-blockminsize"))
         InitWarning("Unsupported argument -blockminsize ignored.");
+
+    // TODO 여기서부터는 잘 모르겠네... 나중에 돌아와서 볼 것.. ---------------------------------------------------------------------------------------------------------
 
     // Checkmempool and checkblockindex default to true in regtest mode
     int ratio = std::min<int>(std::max<int>(gArgs.GetArg("-checkmempool", chainparams.DefaultConsistencyChecks() ? 1 : 0), 0), 1000000);
@@ -997,12 +1004,15 @@ bool AppInitParameterInteraction()
     if (nMinimumChainWork < UintToArith256(chainparams.GetConsensus().nMinimumChainWork)) {
         LogPrintf("Warning: nMinimumChainWork set below default value of %s\n", chainparams.GetConsensus().nMinimumChainWork.GetHex());
     }
+    // TODO 여기까지 잘 모르겠음 -------------------------------------------------------------------------------------------------------------------------------------
 
+    // mempool의 최소와 최대 사이즈를 지정합니다. 최소는 의미가 별로 없어 보이고(물론 어떤 계산된 기준값이겠지만..), 최대만 의미있을 것 같습니다.
     // mempool limits
     int64_t nMempoolSizeMax = gArgs.GetArg("-maxmempool", DEFAULT_MAX_MEMPOOL_SIZE) * 1000000;
     int64_t nMempoolSizeMin = gArgs.GetArg("-limitdescendantsize", DEFAULT_DESCENDANT_SIZE_LIMIT) * 1000 * 40;
     if (nMempoolSizeMax < 0 || nMempoolSizeMax < nMempoolSizeMin)
         return InitError(strprintf(_("-maxmempool must be at least %d MB"), std::ceil(nMempoolSizeMin / 1000000.0)));
+    // mempool에  넣어놓거나, relay 하는데에도 fee를 줄 수 있다. 기본은 kb당 1000사토시임.
     // incremental relay fee sets the minimum feerate increase necessary for BIP 125 replacement in the mempool
     // and the amount the mempool min fee increases above the feerate of txs evicted due to mempool limiting.
     if (gArgs.IsArgSet("-incrementalrelayfee"))
@@ -1013,6 +1023,7 @@ bool AppInitParameterInteraction()
         incrementalRelayFee = CFeeRate(n);
     }
 
+    // 주석이 좀 잘못된듯... 0이면 autodetect, 1이면 no concurrency인 듯 하다. max는 16이다.
     // -par=0 means autodetect, but nScriptCheckThreads==0 means no concurrency
     nScriptCheckThreads = gArgs.GetArg("-par", DEFAULT_SCRIPTCHECK_THREADS);
     if (nScriptCheckThreads <= 0)
@@ -1023,6 +1034,7 @@ bool AppInitParameterInteraction()
         nScriptCheckThreads = MAX_SCRIPTCHECK_THREADS;
 
     // block pruning; get the amount of disk space (in MiB) to allot for block & undo files
+    // prune 설정에 대한 체크. 
     int64_t nPruneArg = gArgs.GetArg("-prune", 0);
     if (nPruneArg < 0) {
         return InitError(_("Prune cannot be configured with a negative value."));
@@ -1040,15 +1052,19 @@ bool AppInitParameterInteraction()
         fPruneMode = true;
     }
 
+    // NOTE !!!!! 중요 !! 여기서 RPC 커맨드들을 등록합니다 !!!!
+    // rpc/server.cpp 쪽에 CTableRPC의 인스턴스 전역변수가 있습니다.
     RegisterAllCoreRPCCommands(tableRPC);
 #ifdef ENABLE_WALLET
     RegisterWalletRPC(tableRPC);
 #endif
 
+    // 다른 노드에 연결할 때, 커넥션 타임아웃 시간을 지정합니다.
     nConnectTimeout = gArgs.GetArg("-timeout", DEFAULT_CONNECT_TIMEOUT);
     if (nConnectTimeout <= 0)
         nConnectTimeout = DEFAULT_CONNECT_TIMEOUT;
 
+    // TODO 여기서부터 다시 잘 이해 안되기 시작... ---------------------------------------------------------------------------------------------------------
     if (gArgs.IsArgSet("-minrelaytxfee")) {
         CAmount n = 0;
         if (!ParseMoney(gArgs.GetArg("-minrelaytxfee", ""), n)) {
@@ -1080,35 +1096,46 @@ bool AppInitParameterInteraction()
             return InitError(AmountErrMsg("dustrelayfee", gArgs.GetArg("-dustrelayfee", "")));
         dustRelayFee = CFeeRate(n);
     }
+    // TODO 여기까지 잘 모르겠음 -------------------------------------------------------------------------------------------------------------------------------------
 
+    // 비표준 거래 허용 여부.
     fRequireStandard = !gArgs.GetBoolArg("-acceptnonstdtxn", !chainparams.RequireStandard());
     if (chainparams.RequireStandard() && !fRequireStandard)
         return InitError(strprintf("acceptnonstdtxn is not currently supported for %s chain", chainparams.NetworkIDString()));
+
+    // TODO 긴가민가함. 잘 모르겠음.
     nBytesPerSigOp = gArgs.GetArg("-bytespersigop", nBytesPerSigOp);
 
+    // wallet 관련... TODO 안에 잘 모르겠는 것들 투성이임...
 #ifdef ENABLE_WALLET
     if (!WalletParameterInteraction())
         return false;
 #endif
 
+    // TODO 으악 모르겠어... 시작  -------------------------------------------------------------------------------------------
     fIsBareMultisigStd = gArgs.GetBoolArg("-permitbaremultisig", DEFAULT_PERMIT_BAREMULTISIG);
     fAcceptDatacarrier = gArgs.GetBoolArg("-datacarrier", DEFAULT_ACCEPT_DATACARRIER);
     nMaxDatacarrierBytes = gArgs.GetArg("-datacarriersize", nMaxDatacarrierBytes);
 
     // Option to startup with mocktime set (used for regression testing):
     SetMockTime(gArgs.GetArg("-mocktime", 0)); // SetMockTime(0) is a no-op
+    // TODO 으악 모르겠어... 끝 ----------------------------------------------------------------------------------------------
 
+    // bloomfilter를 쓸지 여부인 듯. 기본은 true이다.
     if (gArgs.GetBoolArg("-peerbloomfilters", DEFAULT_PEERBLOOMFILTERS))
         nLocalServices = ServiceFlags(nLocalServices | NODE_BLOOM);
 
+    // RPC로 호출된 거래를 어떻게 직렬화 할지 여부입니다. 0은 non-segwit transaction으로 직렬화 하고, 1은 segwit transaction으로 직렬화 합니다.
     if (gArgs.GetArg("-rpcserialversion", DEFAULT_RPC_SERIALIZE_VERSION) < 0)
         return InitError("rpcserialversion must be non-negative.");
 
     if (gArgs.GetArg("-rpcserialversion", DEFAULT_RPC_SERIALIZE_VERSION) > 1)
         return InitError("unknown rpcserialversion requested.");
 
+    // 체인의 최상위 블록이 이론적으로 얼마나 오래되었을 수 있을까를 검사하는데 활용합니다. 알고 있는 체인의 최상위 블록이 이보다 오래되었으면, 동기화가 필요한 것으로 판단합니다.
     nMaxTipAge = gArgs.GetArg("-maxtipage", DEFAULT_MAX_TIP_AGE);
 
+    // TODO 메모리 풀에서 tx를 교체할 수 있도록 하는 것으로 보이는데... 정확히 모르겠네.
     fEnableReplacement = gArgs.GetBoolArg("-mempoolreplacement", DEFAULT_ENABLE_REPLACEMENT);
     if ((!fEnableReplacement) && gArgs.IsArgSet("-mempoolreplacement")) {
         // Minimal effort at forwards compatibility
@@ -1118,6 +1145,7 @@ bool AppInitParameterInteraction()
         fEnableReplacement = (std::find(vstrReplacementModes.begin(), vstrReplacementModes.end(), "fee") != vstrReplacementModes.end());
     }
 
+    // TODO 버전 비트를 수정함. 어떻게 쓰이는지 좀더 분석 필요. regtest 모드에서만 켤 수 있게 되어 있음..
     if (gArgs.IsArgSet("-vbparams")) {
         // Allow overriding version bits parameters for testing
         if (!chainparams.MineBlocksOnDemand()) {

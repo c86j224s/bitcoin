@@ -147,12 +147,13 @@ bool AppInit(int argc, char* argv[])
             // InitError will have been called with detailed error, which ends up on console
             exit(EXIT_FAILURE);
         }
-        // TODO -------------------------------------- 여기서부터 이어서....
+        // 잘못된 파라미터들을 검증한다. InitParameterInteraction은 같이 쓰일 수 있는/없는 파라미터들을 주로 고쳐준다면, 여기서는 의미적인 부분과 값 범위 등을 체크한다.
         if (!AppInitParameterInteraction())
         {
             // InitError will have been called with detailed error, which ends up on console
             exit(EXIT_FAILURE);
         }
+        // TODO -------------------------------------- 여기서부터 이어서....
         if (!AppInitSanityChecks())
         {
             // InitError will have been called with detailed error, which ends up on console

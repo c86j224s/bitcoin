@@ -53,12 +53,14 @@ std::string GetWalletHelpString(bool showDebug)
 
 bool WalletParameterInteraction()
 {
+    // 기본 월릿을 쓰거나, 직접 지정한 N개의 월릿을 쓰거나..
     gArgs.SoftSetArg("-wallet", DEFAULT_WALLET_DAT);
     const bool is_multiwallet = gArgs.GetArgs("-wallet").size() > 1;
 
     if (gArgs.GetBoolArg("-disablewallet", DEFAULT_DISABLE_WALLET))
         return true;
 
+    // TODO 여기서부터 잘 모르겠음. -----------------------------------------------------------------------------------------------
     if (gArgs.GetBoolArg("-blocksonly", DEFAULT_BLOCKSONLY) && gArgs.SoftSetBoolArg("-walletbroadcast", false)) {
         LogPrintf("%s: parameter interaction: -blocksonly=1 -> setting -walletbroadcast=0\n", __func__);
     }
@@ -94,12 +96,16 @@ bool WalletParameterInteraction()
             return InitError(strprintf("%s is only allowed with a single wallet file", "-upgradewallet"));
         }
     }
+    // TODO 여까지 ~~~ ----------------------------------------------------------------------------------------------------------------------------
 
+    // 월릿을 쓰면 sysperms를 켤 수 없음.
     if (gArgs.GetBoolArg("-sysperms", false))
         return InitError("-sysperms is not allowed in combination with enabled wallet functionality");
+    // 얘는 왜 여기에 들어가 있지?? prune이랑 rescan은 같이 쓸 수 없음.
     if (gArgs.GetArg("-prune", 0) && gArgs.GetBoolArg("-rescan", false))
         return InitError(_("Rescans are not possible in pruned mode. You will need to use -reindex which will download the whole blockchain again."));
 
+    // minrelaytxfee는 0.01사토시를 넘을 수 없습니다. 아마도 얘는 여기 들어가 있는 까닭은 직접 bitcoind를 이용해 거래를 전송할 때 잘못 넣는 걸 방지하기 위함일 것 같음.
     if (::minRelayTxFee.GetFeePerK() > HIGH_TX_FEE_PER_KB)
         InitWarning(AmountHighWarn("-minrelaytxfee") + " " +
                     _("The wallet will avoid paying less than the minimum relay fee."));
@@ -164,8 +170,12 @@ bool WalletParameterInteraction()
                                        gArgs.GetArg("-maxtxfee", ""), ::minRelayTxFee.ToString()));
         }
     }
+    // confirmationtarget이 중요한 건, 월릿에 들어온 돈을 바로 쓸수 있게 해줄 것이냐와 관련이 있음. 이 값을 줄이게 되면, 사용하는 거래가 확실히 컨펌되게 하려고, fee를 높게 주도록 되어 있음.
     nTxConfirmTarget = gArgs.GetArg("-txconfirmtarget", DEFAULT_TX_CONFIRM_TARGET);
+
+    // TODO 잘 모르겠음.....
     bSpendZeroConfChange = gArgs.GetBoolArg("-spendzeroconfchange", DEFAULT_SPEND_ZEROCONF_CHANGE);
+    // TODO 잘 모르겠음.....
     fWalletRbf = gArgs.GetBoolArg("-walletrbf", DEFAULT_WALLET_RBF);
 
     return true;
