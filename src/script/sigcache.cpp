@@ -72,6 +72,8 @@ static CSignatureCache signatureCache;
 // signatureCache.
 void InitSignatureCache()
 {
+    // signature cache의 최대 사이즈를 설정한다. 기본은 32mb 이다.
+    //
     // nMaxCacheSize is unsigned. If -maxsigcachesize is set to zero,
     // setup_bytes creates the minimum possible cache (2 elements).
     size_t nMaxCacheSize = std::min(std::max((int64_t)0, gArgs.GetArg("-maxsigcachesize", DEFAULT_MAX_SIG_CACHE_SIZE) / 2), MAX_MAX_SIG_CACHE_SIZE) * ((size_t) 1 << 20);

@@ -153,13 +153,12 @@ bool AppInit(int argc, char* argv[])
             // InitError will have been called with detailed error, which ends up on console
             exit(EXIT_FAILURE);
         }
-        // TODO -------------------------------------- 여기서부터 이어서....
+        // 암복호화 알고리즘, 랜덤함수 등을 시스템 환경을 체크하여 초기화한다.
         if (!AppInitSanityChecks())
         {
             // InitError will have been called with detailed error, which ends up on console
             exit(EXIT_FAILURE);
         }
-        // TODO -------------------------------------- 여기까지 보고 넘어가야 함...
         // 데몬으로 실행해달라고 했으면 데몬으로 실행.
         if (gArgs.GetBoolArg("-daemon", false))
         {
@@ -184,7 +183,7 @@ bool AppInit(int argc, char* argv[])
             // If locking the data directory failed, exit immediately
             exit(EXIT_FAILURE);
         }
-        // TODO 여기서부터 다시 이어서....................................................................
+        // 본격적으로 실행을 시작하고, 핸들러와 스케줄러 등을 등록한다.
         fRet = AppInitMain(threadGroup, scheduler);
     }
     catch (const std::exception& e) {
@@ -193,6 +192,7 @@ bool AppInit(int argc, char* argv[])
         PrintExceptionContinue(nullptr, "AppInit()");
     }
 
+    // TODO 여기서부터 다시 이어서......................................................................
     if (!fRet)
     {
         Interrupt(threadGroup);

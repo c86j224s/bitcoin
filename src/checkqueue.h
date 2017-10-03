@@ -26,6 +26,7 @@ class CCheckQueueControl;
   * the master is done adding work, it temporarily joins the worker pool
   * as an N'th worker, until all jobs are done.
   */
+// 체크 기능을 하는 워커 클래스이다. 클래스 인스턴스 하나 당 쓰레드 하나 씩을 배정받는다.
 template <typename T>
 class CCheckQueue
 {
@@ -68,6 +69,8 @@ private:
     /** Internal function that does bulk of the verification work. */
     bool Loop(bool fMaster = false)
     {
+        // TODO 
+
         boost::condition_variable& cond = fMaster ? condMaster : condWorker;
         std::vector<T> vChecks;
         vChecks.reserve(nBatchSize);

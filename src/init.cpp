@@ -1210,13 +1210,18 @@ bool AppInitSanityChecks()
     // ********************************************************* Step 4: sanity checks
 
     // Initialize elliptic curve code
+    // 인텔 프로세서에서는 Fast SHA256이라는 기능을 지원한다. 해당 기능 이용이 가능한지 체크한다.
     std::string sha256_algo = SHA256AutoDetect();
     LogPrintf("Using the '%s' SHA256 implementation\n", sha256_algo);
+    // 랜덤성을 높이기 위해, 인텔 CPU에서 제공하는 RdRand 옵코드 지원을 체크한다. (RdRand는 랜덤 함수를 만들어내는 과정 중의 하나로 삽입된다.)
     RandomInit();
+    // 위에서 초기화한 랜덤 함수로 secp256k1 seed 초기화..
     ECC_Start();
+    // TODO 
     globalVerifyHandle.reset(new ECCVerifyHandle());
 
     // Sanity check
+    // ECC와 랜덤 함수가 정상적으로 동작하는지 체크한다.
     if (!InitSanityCheck())
         return InitError(strprintf(_("Initialization sanity check failed. %s is shutting down."), _(PACKAGE_NAME)));
 
@@ -1241,17 +1246,25 @@ bool AppInitLockDataDirectory()
 
 bool AppInitMain(boost::thread_group& threadGroup, CScheduler& scheduler)
 {
+    // 진정한 메인 함수..
+
     const CChainParams& chainparams = Params();
+
     // ********************************************************* Step 4a: application initialization
+    // ********************************************************* application 실행을 위한 초기화를 하는 부분이다.
+
+    // w32이면 pid 파일을 만든다. TODO 왜 w32일 때만 만들지?
 #ifndef WIN32
     CreatePidFile(GetPidFile(), getpid());
 #endif
+    // debug.log 파일을 약 10MB 크기로 유지한다.
     if (gArgs.GetBoolArg("-shrinkdebugfile", logCategories == BCLog::NONE)) {
         // Do this first since it both loads a bunch of debug.log into memory,
         // and because this needs to happen before any other debug.log printing
         ShrinkDebugFile();
     }
 
+    // console Log가 아닌 debug log를 남겨야 한다면, debug log 파일을 열고, 시작 로그를 남긴다.
     if (fPrintToDebugLog)
         OpenDebugLog();
 
@@ -1262,14 +1275,19 @@ bool AppInitMain(boost::thread_group& threadGroup, CScheduler& scheduler)
     LogPrintf("Using config file %s\n", GetConfigFile(gArgs.GetArg("-conf", BITCOIN_CONF_FILENAME)).string());
     LogPrintf("Using at most %i automatic connections (%i file descriptors available)\n", nMaxConnections, nFD);
 
+    // signature cache를 초기화한다. 어느 정도의 bytes를 차지할 것인가를 설정한다..
     InitSignatureCache();
+    // script execution cache를 초기화한다. 어느 정도의 bytes를 차지할 것인가를 설정한다.
     InitScriptExecutionCache();
 
+    // script check thread를 생성. ThreadScriptCheck 전역 루틴을 쓰레드 메인 루틴으로 입력한다.
     LogPrintf("Using %u threads for script verification\n", nScriptCheckThreads);
     if (nScriptCheckThreads) {
         for (int i=0; i<nScriptCheckThreads-1; i++)
             threadGroup.create_thread(&ThreadScriptCheck);
     }
+
+    //----------------- TODO 여기서부터 이어서 보아야함. -----------------------------------------------------
 
     // Start the lightweight task scheduler thread
     CScheduler::Function serviceLoop = boost::bind(&CScheduler::serviceQueue, &scheduler);

@@ -1218,6 +1218,8 @@ static CuckooCache::cache<uint256, SignatureCacheHasher> scriptExecutionCache;
 static uint256 scriptExecutionCacheNonce(GetRandHash());
 
 void InitScriptExecutionCache() {
+    // scriptExecutionCache를 초기화함. 기본값 32mb. TODO scriptExecutionCache는 어디에 쓰지??
+    
     // nMaxCacheSize is unsigned. If -maxsigcachesize is set to zero,
     // setup_bytes creates the minimum possible cache (2 elements).
     size_t nMaxCacheSize = std::min(std::max((int64_t)0, gArgs.GetArg("-maxsigcachesize", DEFAULT_MAX_SIG_CACHE_SIZE) / 2), MAX_MAX_SIG_CACHE_SIZE) * ((size_t) 1 << 20);
@@ -1536,6 +1538,7 @@ static bool FindUndoPos(CValidationState &state, int nFile, CDiskBlockPos &pos, 
 static CCheckQueue<CScriptCheck> scriptcheckqueue(128);
 
 void ThreadScriptCheck() {
+    // scriptcheckqueue를 검사하는 쓰레드를 시작한다. 쓰레드의 메인 루틴임. 한번에 128개의 scriptcheck를 함.
     RenameThread("bitcoin-scriptch");
     scriptcheckqueue.Thread();
 }
