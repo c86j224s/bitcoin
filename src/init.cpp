@@ -708,16 +708,25 @@ bool InitSanityCheck(void)
 
 bool AppInitServers(boost::thread_group& threadGroup)
 {
+    // JSON-RPC 서버를 초기화 하는 부분이다.
+
+    // rpc start, stop 시그널 초기화.
     RPCServer::OnStarted(&OnRPCStarted);
     RPCServer::OnStopped(&OnRPCStopped);
+
+    // HTTPServer를 초기화한다.
     if (!InitHTTPServer())
         return false;
+    // g_rpcSignals에 Started 시그널을 뿌린다. 로그를 찍고, latestblock 관련하여 UI 상에 뿌려줄 값을 갱신한다.
     if (!StartRPC())
         return false;
+    // JSON RPC 요청을 처리할 수 있는 핸들러를 등록하고, 타이머를 libevhttp에 등록하기 위한 준비 작업을 하는 등을 한다.
     if (!StartHTTPRPC())
         return false;
+    // "rest" 옵션을 주었을 경우, "/rest/"로 시작하는 RESTful API를 쓸 수도 있다. 다만, 현재는 GET 요청에 한하는 것으로 보인다.
     if (gArgs.GetBoolArg("-rest", DEFAULT_REST_ENABLE) && !StartREST())
         return false;
+    // libevhttp의 event loop를 dispatch하고, RPC를 처리할 worker thread를 만든다.
     if (!StartHTTPServer())
         return false;
     return true;
@@ -1251,7 +1260,7 @@ bool AppInitMain(boost::thread_group& threadGroup, CScheduler& scheduler)
     const CChainParams& chainparams = Params();
 
     // ********************************************************* Step 4a: application initialization
-    // ********************************************************* application 실행을 위한 초기화를 하는 부분이다.
+    // ********************************************************* application 실행을 위한 초기화를 하는 부분이다. 로그, 메모리, 쓰레드.
 
     // w32이면 pid 파일을 만든다. TODO 왜 w32일 때만 만들지?
 #ifndef WIN32
@@ -1287,12 +1296,13 @@ bool AppInitMain(boost::thread_group& threadGroup, CScheduler& scheduler)
             threadGroup.create_thread(&ThreadScriptCheck);
     }
 
-    //----------------- TODO 여기서부터 이어서 보아야함. -----------------------------------------------------
-
+    // 스케줄러 쓰레드를 하나 만든다. 좀더 익숙해져야겠지만, g_signals쪽에 scheduler를 등록하고, 이에 대한 처리를 이 쓰레드에서 하는 것으로 보임. 추정.
     // Start the lightweight task scheduler thread
     CScheduler::Function serviceLoop = boost::bind(&CScheduler::serviceQueue, &scheduler);
     threadGroup.create_thread(boost::bind(&TraceThread<CScheduler::Function>, "scheduler", serviceLoop));
 
+    // GetMainSignals는 g_signals랑 같은 애임. g_signals는 네트워크 / 데이터 프로세싱 과정에서 발생한 이벤트를 UI 인터페이스 등에 펌핑 하는 역할을 한다.
+    // UI인터페이스로도 되겠지만, g_signals를 별도로 둔 까닭은 아마도 decoupling을 위한 것으로 보인다.
     GetMainSignals().RegisterBackgroundSignalScheduler(scheduler);
 
     /* Start the RPC server already.  It will be started in "warmup" mode
@@ -1302,14 +1312,19 @@ bool AppInitMain(boost::thread_group& threadGroup, CScheduler& scheduler)
      */
     if (gArgs.GetBoolArg("-server", false))
     {
+        // 스플래시 화면에 warmup 상태를 보여주기 위한 루틴을 연결한다.
         uiInterface.InitMessage.connect(SetRPCWarmupStatus);
+        // JSON-RPC 서버를 초기화한다.
         if (!AppInitServers(threadGroup))
             return InitError(_("Unable to start HTTP server. See debug log for details."));
     }
+ 
+    int64_t nStart;            // 로딩 예상 시간을 측정하기 위한 변수인데... 한참 밑에서 쓸 걸 왜 여기에서 미리...
 
-    int64_t nStart;
+    //----------------- TODO 여기서부터 이어서 보아야함. -----------------------------------------------------
 
     // ********************************************************* Step 5: verify wallet database integrity
+    // *********************************************************
 #ifdef ENABLE_WALLET
     if (!VerifyWallets())
         return false;

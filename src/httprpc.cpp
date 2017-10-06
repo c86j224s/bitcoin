@@ -144,6 +144,8 @@ static bool RPCAuthorized(const std::string& strAuth, std::string& strAuthUserna
 
 static bool HTTPReq_JSONRPC(HTTPRequest* req, const std::string &)
 {
+    // JSON-RPC 입력을 처리하는 부분이다.
+
     // JSONRPC handles only POST
     if (req->GetRequestMethod() != HTTPRequest::POST) {
         req->WriteReply(HTTP_BAD_METHOD, "JSONRPC server handles only POST requests");
@@ -164,6 +166,7 @@ static bool HTTPReq_JSONRPC(HTTPRequest* req, const std::string &)
         /* Deter brute-forcing
            If this results in a DoS the user really
            shouldn't have their RPC port exposed. */
+        // 아무리 dos 막는다고 하지만... authorization 헤더 검사에 실패하면 아예 슬립을 걸어버리다니... -_-;;
         MilliSleep(250);
 
         req->WriteHeader("WWW-Authenticate", WWW_AUTH_HEADER_DATA);
@@ -181,10 +184,13 @@ static bool HTTPReq_JSONRPC(HTTPRequest* req, const std::string &)
         jreq.URI = req->GetURI();
 
         std::string strReply;
+        // 여러 명령을 한꺼번에 array로 받을 수도 있고, 하나씩 받을 수도 있다.
+        // array로 받는 건 별거 없고, 그냥 for 문 돌면서 처리한다 -_-;; sync이다.
         // singleton request
         if (valRequest.isObject()) {
             jreq.parse(valRequest);
 
+            // NOTE 중요 !! tapleRPC는 실제 JSON-RPC 요청을 실행하는 핸들러들이 들어 있는 테이블이다.
             UniValue result = tableRPC.execute(jreq);
 
             // Send reply
@@ -229,15 +235,20 @@ static bool InitRPCAuthentication()
 bool StartHTTPRPC()
 {
     LogPrint(BCLog::RPC, "Starting HTTP RPC server\n");
+    // TODO cookie를 어디에 사용하기 위해 만드는걸까?
     if (!InitRPCAuthentication())
         return false;
 
+    // HTTP URI 핸들러를 등록한다. HTTPReq_JSONRPC에서 실제 처리를 수행한다. 
+    // authorization 하고, tableRPC.execute를 수행한다.
     RegisterHTTPHandler("/", true, HTTPReq_JSONRPC);
 #ifdef ENABLE_WALLET
     // ifdef can be removed once we switch to better endpoint support and API versioning
     RegisterHTTPHandler("/wallet/", false, HTTPReq_JSONRPC);
 #endif
     assert(EventBase());
+    // 지갑을 언락한 후 일정시간 후에 다시 잠그는 기능 구현을 위해, libevent를 이용한다.
+    // timerInterface를 이용해, 일정 시간 뒤에 이벤트가 트리거 되는 기능을 구현한다. (RPCRunLater)
     httpRPCTimerInterface = new HTTPRPCTimerInterface(EventBase());
     RPCSetTimerInterface(httpRPCTimerInterface);
     return true;

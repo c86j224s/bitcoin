@@ -190,6 +190,7 @@ static bool ClientAllowed(const CNetAddr& netaddr)
 /** Initialize ACL list for HTTP server */
 static bool InitHTTPAllowList()
 {
+    // local subnet ip나, rpcallowip옵션을 지정한 ip에 대해 허용한다.
     rpc_allow_subnets.clear();
     CNetAddr localv4;
     CNetAddr localv6;
@@ -366,9 +367,11 @@ static void libevent_log_cb(int severity, const char *msg)
 
 bool InitHTTPServer()
 {
+    // JSON-RPC 화이트리스트 초기화.
     if (!InitHTTPAllowList())
         return false;
 
+    // 예전에는 JSON-RPC에 대해 SSL을 지원했었으나, 지금은 하지 않는다.
     if (gArgs.GetBoolArg("-rpcssl", false)) {
         uiInterface.ThreadSafeMessageBox(
             "SSL mode for RPC (-rpcssl) is no longer supported.",
@@ -376,6 +379,7 @@ bool InitHTTPServer()
         return false;
     }
 
+    // 여기서부터 libevent, libevhttp 초기화. eventbase와 evhttp만 초기화 하고, dispatch는 나중에 한다.
     // Redirect libevent's logging to our own log
     event_set_log_callback(&libevent_log_cb);
     // Update libevent's log handling. Returns false if our version of
@@ -404,13 +408,19 @@ bool InitHTTPServer()
     evhttp_set_timeout(http, gArgs.GetArg("-rpcservertimeout", DEFAULT_HTTP_SERVER_TIMEOUT));
     evhttp_set_max_headers_size(http, MAX_HEADERS_SIZE);
     evhttp_set_max_body_size(http, MAX_SIZE);
+
+    // HTTP Request에 대한 callback을 지정한다!! URI matching하는 코드가 있긴 하지만, 
+    // 별다른 옵션을 주지 않을 경우, JSON-RPC에서는 "/"와 "/wallet/..."만 취급한다. 받아서, WorkItem을 만들어서 WorkQueue에 던져 넣는다.
+    // 크게 신경 쓸 필요 없다..
     evhttp_set_gencb(http, http_request_cb, nullptr);
 
+    // 소켓 바인딩.
     if (!HTTPBindAddresses(http)) {
         LogPrintf("Unable to bind any endpoint for RPC server\n");
         return false;
     }
 
+    // workqueue. 기본이 16개이므로, 더 높게 지정해주는 것이 좋을 것 같다.
     LogPrint(BCLog::HTTP, "Initialized HTTP server\n");
     int workQueueDepth = std::max((long)gArgs.GetArg("-rpcworkqueue", DEFAULT_HTTP_WORKQUEUE), 1L);
     LogPrintf("HTTP: creating work queue of depth %d\n", workQueueDepth);
@@ -441,6 +451,8 @@ std::future<bool> threadResult;
 
 bool StartHTTPServer()
 {
+    // eventbase를 dispatch할 쓰레드와, 루틴을 만든다. 기본적으로 1개를 만든다.
+    // 만들어진 쓰레드는 threadHTTP, threadResult 전역변수로 관리된다.
     LogPrint(BCLog::HTTP, "Starting HTTP server\n");
     int rpcThreads = std::max((long)gArgs.GetArg("-rpcthreads", DEFAULT_HTTP_THREADS), 1L);
     LogPrintf("HTTP: starting %d worker threads\n", rpcThreads);
@@ -448,6 +460,9 @@ bool StartHTTPServer()
     threadResult = task.get_future();
     threadHTTP = std::thread(std::move(task), eventBase, eventHTTP);
 
+    // RPC worker는 eventbase와 무관하다. 기본값은 4개이며, rpcthreads 값으로 조절 가능하다.
+    // 이 workQueue는 앞서 만든 workQueue이다.
+    // 얘는 왜 만들어진 쓰레드 관리해주는 부분이 없지? join 안 하는건가???? TODO
     for (int i = 0; i < rpcThreads; i++) {
         std::thread rpc_worker(HTTPWorkQueueRun, workQueue);
         rpc_worker.detach();
