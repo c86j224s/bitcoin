@@ -1321,26 +1321,32 @@ bool AppInitMain(boost::thread_group& threadGroup, CScheduler& scheduler)
  
     int64_t nStart;            // 로딩 예상 시간을 측정하기 위한 변수인데... 한참 밑에서 쓸 걸 왜 여기에서 미리...
 
-    //----------------- TODO 여기서부터 이어서 보아야함. -----------------------------------------------------
-
     // ********************************************************* Step 5: verify wallet database integrity
-    // *********************************************************
+    // ********************************************************* wallet 파일이 정상적인 leveldb 파일인지 체크함.
+    
+    // 지갑 파일이 정상적으로 잘 읽히는지 체크하고, 복구가 필요하다면 (옵션을 넣었거나..) 복구한다.
 #ifdef ENABLE_WALLET
     if (!VerifyWallets())
         return false;
 #endif
+
+
     // ********************************************************* Step 6: network initialization
     // Note that we absolutely cannot open any actual connections
     // until the very end ("start node") as the UTXO/block state
     // is not yet setup and may end up being set up twice if we
     // need to reindex later.
 
+    // Connman 인스턴스 생성. Connman은 다양하고 중요한 기능을 갖고 있는 socket object라고 생각해도 된다.
     assert(!g_connman);
     g_connman = std::unique_ptr<CConnman>(new CConnman(GetRand(std::numeric_limits<uint64_t>::max()), GetRand(std::numeric_limits<uint64_t>::max())));
     CConnman& connman = *g_connman;
 
+    // PeerLogicValidation은 connman이 blockchain으로부터 이벤트를 받았을 때 처리할 로직을 가지고 있다. 여기에서 g_signals, connman, vlidationinterface를 묶는다.
     peerLogic.reset(new PeerLogicValidation(&connman));
     RegisterValidationInterface(peerLogic.get());
+
+    // BIP-0014에 따라, subversion(useragent) 셋팅. 나중에 피어에게 version 패킷을 보낼 때 담겨서 보내진다.
 
     // sanitize comments per BIP-0014, format user agent and check total size
     std::vector<std::string> uacomments;
@@ -1355,6 +1361,8 @@ bool AppInitMain(boost::thread_group& threadGroup, CScheduler& scheduler)
             strSubVersion.size(), MAX_SUBVERSION_LENGTH));
     }
 
+    // 여기서부터 몇단락 동안, 네트워크를 어떻게 연결맺을지 설정을 한다. ipv4, ipv6, tor 등 제한을 두거나,
+    // 프록시를 두거나... DNS 룩업을 사용할 것인지 등.. 
     if (gArgs.IsArgSet("-onlynet")) {
         std::set<enum Network> nets;
         for (const std::string& snet : gArgs.GetArgs("-onlynet")) {
@@ -1416,10 +1424,12 @@ bool AppInitMain(boost::thread_group& threadGroup, CScheduler& scheduler)
     }
 
     // see Step 2: parameter interactions for more information about these
+    // listen, discovery, tx relay 여부 등을 설정한다.
     fListen = gArgs.GetBoolArg("-listen", DEFAULT_LISTEN);
     fDiscover = gArgs.GetBoolArg("-discover", true);
     fRelayTxes = !gArgs.GetBoolArg("-blocksonly", DEFAULT_BLOCKSONLY);
 
+    // 이 노드는 여러 ip를 가지고 있을 것이므로, 그것들을 binding할 수 있게 노드 ip 주소들의 목록을 준비한다. 
     for (const std::string& strAddr : gArgs.GetArgs("-externalip")) {
         CService addrLocal;
         if (Lookup(strAddr.c_str(), addrLocal, GetListenPort(), fNameLookup) && addrLocal.IsValid())
@@ -1428,6 +1438,9 @@ bool AppInitMain(boost::thread_group& threadGroup, CScheduler& scheduler)
             return InitError(ResolveErrMsg("externalip", strAddr));
     }
 
+
+    // ZMQ를 쓸 수 있다면, ZMQNotificationInterface를 추가로 validationinterface로 등록한다.
+    // 새로운 이벤트가 발생했을 때, ZMQ 네트워크에 해당 이벤트를 upload하여 다른 ZMQ 클라이언트들이 이를 소비할 수 있도록 합니다.
 #if ENABLE_ZMQ
     pzmqNotificationInterface = CZMQNotificationInterface::Create();
 
@@ -1435,12 +1448,16 @@ bool AppInitMain(boost::thread_group& threadGroup, CScheduler& scheduler)
         RegisterValidationInterface(pzmqNotificationInterface);
     }
 #endif
+
+    // 일단위로 outbound network limit을 지정할 수 있다. 어차피 0이면 무관함... 왜 필요했던걸까?
     uint64_t nMaxOutboundLimit = 0; //unlimited unless -maxuploadtarget is set
     uint64_t nMaxOutboundTimeframe = MAX_UPLOAD_TIMEFRAME;
 
     if (gArgs.IsArgSet("-maxuploadtarget")) {
         nMaxOutboundLimit = gArgs.GetArg("-maxuploadtarget", DEFAULT_MAX_UPLOAD_TARGET)*1024*1024;
     }
+
+    //----------------- TODO 여기서부터 이어서 보아야함. -----------------------------------------------------
 
     // ********************************************************* Step 7: load block chain
 

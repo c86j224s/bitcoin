@@ -198,6 +198,7 @@ bool VerifyWallets()
     // Keep track of each wallet absolute path to detect duplicates.
     std::set<fs::path> wallet_paths;
 
+    // 옵션으로 지정한 wallet 파일을 순회한다.
     for (const std::string& walletFile : gArgs.GetArgs("-wallet")) {
         if (boost::filesystem::path(walletFile).filename() != walletFile) {
             return InitError(strprintf(_("Error loading wallet %s. -wallet parameter must only specify a filename (not a path)."), walletFile));
@@ -217,11 +218,13 @@ bool VerifyWallets()
             return InitError(strprintf(_("Error loading wallet %s. Duplicate -wallet filename specified."), walletFile));
         }
 
+        // wallet 파일이 존재하는지 확인한다.
         std::string strError;
         if (!CWalletDB::VerifyEnvironment(walletFile, GetDataDir().string(), strError)) {
             return InitError(strError);
         }
 
+        // TODO 지갑 복구 옵션인 것 같은데, 좀더 파악이 필요하다. 지정된 복구용 지갑파일에서 최대한 많이 읽어, 메인 지갑 파일에 기록해 넣고 있다.
         if (gArgs.GetBoolArg("-salvagewallet", false)) {
             // Recover readable keypairs:
             CWallet dummyWallet;
@@ -231,6 +234,7 @@ bool VerifyWallets()
             }
         }
 
+        // 지갑 파일이 올바르게 잘 읽히는지 확인한다. TODO leveldb 이해가 좀 필요해 보인다.
         std::string strWarning;
         bool dbV = CWalletDB::VerifyDatabaseFile(walletFile, GetDataDir().string(), strWarning, strError);
         if (!strWarning.empty()) {
