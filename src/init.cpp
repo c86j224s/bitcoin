@@ -1301,7 +1301,7 @@ bool AppInitMain(boost::thread_group& threadGroup, CScheduler& scheduler)
     CScheduler::Function serviceLoop = boost::bind(&CScheduler::serviceQueue, &scheduler);
     threadGroup.create_thread(boost::bind(&TraceThread<CScheduler::Function>, "scheduler", serviceLoop));
 
-    // GetMainSignals는 g_signals랑 같은 애임. g_signals는 네트워크 / 데이터 프로세싱 과정에서 발생한 이벤트를 UI 인터페이스 등에 펌핑 하는 역할을 한다.
+    // GetMainSignals는 g_signals랑 같은 애임. g_signals는 네트워크 / 데이터 프로세싱 과정에서 발생한 이벤트를 subscriber들의 인터페이스에 펌핑 하는 역할을 한다.
     // UI인터페이스로도 되겠지만, g_signals를 별도로 둔 까닭은 아마도 decoupling을 위한 것으로 보인다.
     GetMainSignals().RegisterBackgroundSignalScheduler(scheduler);
 
@@ -1449,7 +1449,7 @@ bool AppInitMain(boost::thread_group& threadGroup, CScheduler& scheduler)
     }
 #endif
 
-    // 일단위로 outbound network limit을 지정할 수 있다. 어차피 0이면 무관함... 왜 필요했던걸까?
+    // 일단위로 outbound network limit을 지정할 수 있다. privacy를 위해, 하나의 노드에 계속 연결을 맺지 않고 일단위 전송량 제한을 거는데 이용한다.
     uint64_t nMaxOutboundLimit = 0; //unlimited unless -maxuploadtarget is set
     uint64_t nMaxOutboundTimeframe = MAX_UPLOAD_TIMEFRAME;
 
@@ -1457,13 +1457,14 @@ bool AppInitMain(boost::thread_group& threadGroup, CScheduler& scheduler)
         nMaxOutboundLimit = gArgs.GetArg("-maxuploadtarget", DEFAULT_MAX_UPLOAD_TARGET)*1024*1024;
     }
 
-    //----------------- TODO 여기서부터 이어서 보아야함. -----------------------------------------------------
-
     // ********************************************************* Step 7: load block chain
 
+    // reindex 설정 체크.
     fReindex = gArgs.GetBoolArg("-reindex", false);
     bool fReindexChainState = gArgs.GetBoolArg("-reindex-chainstate", false);
 
+    // block index DB(blocktreedb), chain state DB(coindbcache), 인메모리 UTXO 캐시(coincache), 메모리풀(mempool) 등의 최대 사이즈 계산. total cache도 계산.
+    // TODO 잘 모르겠음..
     // cache size calculations
     int64_t nTotalCache = (gArgs.GetArg("-dbcache", nDefaultDbCache) << 20);
     nTotalCache = std::max(nTotalCache, nMinDbCache << 20); // total cache cannot be less than nMinDbCache
@@ -1481,6 +1482,8 @@ bool AppInitMain(boost::thread_group& threadGroup, CScheduler& scheduler)
     LogPrintf("* Using %.1fMiB for chain state database\n", nCoinDBCache * (1.0 / 1024 / 1024));
     LogPrintf("* Using %.1fMiB for in-memory UTXO set (plus up to %.1fMiB of unused mempool space)\n", nCoinCacheUsage * (1.0 / 1024 / 1024), nMempoolSizeMax * (1.0 / 1024 / 1024));
 
+    //----------------- TODO 여기서부터 이어서 보아야함. 블럭 구간임. 여기 보고 넘어가야 함. -----------------------------------------------------
+
     bool fLoaded = false;
     while (!fLoaded && !fRequestShutdown) {
         bool fReset = fReindex;
@@ -1491,6 +1494,7 @@ bool AppInitMain(boost::thread_group& threadGroup, CScheduler& scheduler)
         nStart = GetTimeMillis();
         do {
             try {
+                // block index database 메모리 구조체 초기화
                 UnloadBlockIndex();
                 delete pcoinsTip;
                 delete pcoinsdbview;
@@ -1661,7 +1665,10 @@ bool AppInitMain(boost::thread_group& threadGroup, CScheduler& scheduler)
         ::feeEstimator.Read(est_filein);
     fFeeEstimatesInitialized = true;
 
+    //----------------- TODO 여기까지 보고 이어서 보아야함. -----------------------------------------------------
+
     // ********************************************************* Step 8: load wallet
+    // ********************************************************* 파일에서 wallet을 읽고, validationinterface에 wallet을 등록함.
 #ifdef ENABLE_WALLET
     if (!OpenWallets())
         return false;
@@ -1715,6 +1722,7 @@ bool AppInitMain(boost::thread_group& threadGroup, CScheduler& scheduler)
         vImportFiles.push_back(strFile);
     }
 
+    // 시작을 빨리 하기 위해, 블록을 읽어들이는 쓰레드는 백그라운드로 돌린다.
     threadGroup.create_thread(boost::bind(&ThreadImport, vImportFiles));
 
     // Wait for genesis block to be processed

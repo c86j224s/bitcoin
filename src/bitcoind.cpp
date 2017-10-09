@@ -65,8 +65,8 @@ void WaitForShutdown(boost::thread_group* threadGroup)
 bool AppInit(int argc, char* argv[])
 {
     // 로컬 변수로 생성. 프로그램 만들어지고나서 죽을때 까지.. 얘네들은 실제 AppInitMain 들어갈 때 넘겨준다. (안에서 하면 되지 왜??)
-    boost::thread_group threadGroup;
-    CScheduler scheduler;
+    boost::thread_group threadGroup;    // 쓰레드가 만들어지면, 라이프타임을 여기서 관리.
+    CScheduler scheduler;               // time-based scheduler
 
     bool fRet = false;
 
@@ -212,7 +212,7 @@ int main(int argc, char* argv[])
     // C & linux 환경 대응 메모리 및 로케일 설정.
     SetupEnvironment();
 
-    // UI로 보여줄 메시지 박스 시그널 핸들러를 연결. (default는 noui임.)
+    // UI로 보여줄 메시지 박스 시그널 핸들러를 연결. (bitcoind는 noui임.)
     // Connect bitcoind signal handlers
     noui_connect();
 
