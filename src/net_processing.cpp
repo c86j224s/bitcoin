@@ -251,6 +251,7 @@ void PushNodeVersion(CNode *pnode, CConnman* connman, int64_t nTime)
     CAddress addrYou = (addr.IsRoutable() && !IsProxy(addr) ? addr : CAddress(CService(), addr.nServices));
     CAddress addrMe = CAddress(CService(), nLocalNodeServices);
 
+    // version 프로토콜을 보낸다.
     connman->PushMessage(pnode, CNetMsgMaker(INIT_PROTO_VERSION).Make(NetMsgType::VERSION, PROTOCOL_VERSION, (uint64_t)nLocalNodeServices, nTime, addrYou, addrMe,
             nonce, strSubVersion, nNodeStartingHeight, ::fRelayTxes));
 
@@ -498,6 +499,7 @@ void FindNextBlocksToDownload(NodeId nodeid, unsigned int count, std::vector<con
 } // namespace
 
 void PeerLogicValidation::InitializeNode(CNode *pnode) {
+    // 새로운 피어 연결이 맺어졌을 때, 이 루틴이 실행된다.
     CAddress addr = pnode->addr;
     std::string addrName = pnode->GetAddrName();
     NodeId nodeid = pnode->GetId();
@@ -505,6 +507,7 @@ void PeerLogicValidation::InitializeNode(CNode *pnode) {
         LOCK(cs_main);
         mapNodeState.emplace_hint(mapNodeState.end(), std::piecewise_construct, std::forward_as_tuple(nodeid), std::forward_as_tuple(addr, std::move(addrName)));
     }
+    // inbound 요청이면, 클라이언트 측에서 version 프로토콜을 보내올 것이고, 내가 클라이언트 입장일 경우는 내가 version 프로토콜을 보낸다.
     if(!pnode->fInbound)
         PushNodeVersion(pnode, connman, GetTime());
 }
@@ -1229,14 +1232,17 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
 
         vRecv >> nVersion >> nServiceInt >> nTime >> addrMe;
         nSendVersion = std::min(nVersion, PROTOCOL_VERSION);
+        // none, network, getutxo, bloom, witness, xthin 등..
         nServices = ServiceFlags(nServiceInt);
         if (!pfrom->fInbound)
         {
             connman->SetServices(pfrom->addr, nServices);
         }
+        // 요구하는 서비스를 제공하지 않을 경우 연결을 끊음. 
         if (pfrom->nServicesExpected & ~nServices)
         {
             LogPrint(BCLog::NET, "peer=%d does not offer the expected services (%08x offered, %08x expected); disconnecting\n", pfrom->GetId(), nServices, pfrom->nServicesExpected);
+            // reject 프로토콜
             connman->PushMessage(pfrom, CNetMsgMaker(INIT_PROTO_VERSION).Make(NetMsgType::REJECT, strCommand, REJECT_NONSTANDARD,
                                strprintf("Expected to offer services %08x", pfrom->nServicesExpected)));
             pfrom->fDisconnect = true;
