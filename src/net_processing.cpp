@@ -1205,6 +1205,7 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
     else if (strCommand == NetMsgType::VERSION)
     {
         // Each connection can only send one version message
+        // 각 연결 별로 한번만 version 메시지를 보낼 수 있다. 여러번 보냈을 경우 reject를 보낸다. 이런 식으로 잘못된 동작을 하는 피어는 threshold(기본 100)에 도달하면 banlist에 넣는다.
         if (pfrom->nVersion != 0)
         {
             connman->PushMessage(pfrom, CNetMsgMaker(INIT_PROTO_VERSION).Make(NetMsgType::REJECT, strCommand, REJECT_DUPLICATE, std::string("Duplicate version message")));
